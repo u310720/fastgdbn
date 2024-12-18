@@ -1,17 +1,14 @@
 import logging
-from functools import partial
 from typing import Callable, Literal, Optional, Union
 
 import lightning as L
-import segmentation_models_pytorch as smp
 import torch
 import torchinfo
 from torch import nn, optim
 
-from .constant import OUT_OF_WAFER
-from .convmixer import ConvMixerBlock
+from .constants import OUT_OF_WAFER
 from .submodules import Head, PatchEncoder, Segmenter
-from .utils import DynamicWeightedBCEWithLogitsLoss, LayerNorm, create_label
+from .utils import DynamicWeightedBCEWithLogitsLoss, create_label
 
 
 class FastGDBN(L.LightningModule):
@@ -112,129 +109,3 @@ class FastGDBN(L.LightningModule):
 
     def configure_optimizers(self):
         return optim.AdamW(self.parameters(), lr=8e-4)
-
-
-def convmixer_fastgdbn(dim=32, patch_size=7, encoder_depth=3, *args, **kwargs) -> FastGDBN:
-    decoder_depth = encoder_depth
-    return FastGDBN(
-        dim, patch_size,
-        sub_img_size='same',
-        backbone=partial(
-            nn.Sequential,
-            *[
-                ConvMixerBlock(
-                    dim,
-                    kernel_size=3,
-                    norm_layer=partial(LayerNorm, dim)
-                )
-                for _ in range(encoder_depth + decoder_depth)
-            ]
-        ),
-        *args, **kwargs
-    )
-
-
-def deeplabv3_fastgdbn_bms(dim=32, patch_size=7, encoder_depth=3, *args, **kwargs) -> FastGDBN:
-    return FastGDBN(
-        dim, patch_size,
-        sub_img_size=8,
-        backbone=partial(
-            smp.DeepLabV3,
-            encoder_name="efficientnet-b0",
-            encoder_depth=encoder_depth,
-            decoder_channels=dim * 2**encoder_depth,
-            in_channels=dim,
-            classes=dim,
-            activation=nn.GELU
-        ),
-        *args, **kwargs
-    )
-
-
-def deeplabv3_fastgdbn_bml_bm1b(dim=32, patch_size=7, encoder_depth=3, *args, **kwargs) -> FastGDBN:
-    return FastGDBN(
-        dim, patch_size,
-        sub_img_size=48,
-        backbone=partial(
-            smp.DeepLabV3,
-            encoder_name="efficientnet-b0",
-            encoder_depth=encoder_depth,
-            decoder_channels=dim * 2**encoder_depth,
-            in_channels=dim,
-            classes=dim,
-            activation=nn.GELU
-        ),
-        *args, **kwargs
-    )
-
-
-def fpn_fastgdbn_bms(dim=32, patch_size=7, encoder_depth=3, *args, **kwargs):
-    return FastGDBN(
-        dim, patch_size,
-        sub_img_size=8,
-        backbone=partial(
-            smp.FPN,
-            encoder_name="efficientnet-b0",
-            encoder_depth=encoder_depth,
-            in_channels=dim,
-            decoder_segmentation_channels=2*dim,
-            decoder_pyramid_channels=4*dim,
-            upsampling=1,
-            classes=dim
-        ),
-        *args, **kwargs
-    )
-
-
-def fpn_fastgdbn_bml_bm1b(dim=32, patch_size=7, encoder_depth=3, *args, **kwargs):
-    return FastGDBN(
-        dim, patch_size,
-        sub_img_size=48,
-        backbone=partial(
-            smp.FPN,
-            encoder_name="efficientnet-b0",
-            encoder_depth=encoder_depth,
-            in_channels=dim,
-            decoder_segmentation_channels=2*dim,
-            decoder_pyramid_channels=4*dim,
-            upsampling=1,
-            classes=dim
-        ),
-        *args, **kwargs
-    )
-
-
-def unet_fastgdbn_bms(dim=32, patch_size=7, encoder_depth=3, *args, **kwargs):
-    return FastGDBN(
-        dim, patch_size,
-        sub_img_size=8,
-        backbone=partial(
-            smp.Unet,
-            encoder_name="efficientnet-b0",
-            encoder_depth=encoder_depth,
-            decoder_channels=list(
-                reversed([dim * 2**i for i in range(encoder_depth)])),
-            in_channels=dim,
-            classes=dim,
-            activation=nn.GELU
-        ),
-        *args, **kwargs
-    )
-
-
-def unet_fastgdbn_bml_bm1b(dim=32, patch_size=7, encoder_depth=3, *args, **kwargs):
-    return FastGDBN(
-        dim, patch_size,
-        sub_img_size=48,
-        backbone=partial(
-            smp.Unet,
-            encoder_name="efficientnet-b0",
-            encoder_depth=encoder_depth,
-            decoder_channels=list(
-                reversed([dim * 2**i for i in range(encoder_depth)])),
-            in_channels=dim,
-            classes=dim,
-            activation=nn.GELU
-        ),
-        *args, **kwargs
-    )
