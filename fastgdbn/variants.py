@@ -8,16 +8,6 @@ from .convmixer import ConvMixerBlock
 from .fastgdbn import FastGDBN
 from .utils import LayerNorm
 
-__all__ = [
-    'convmixer_fastgdbn',
-    'deeplabv3_fastgdbn_bms',
-    'deeplabv3_fastgdbn_bml_bm1b',
-    'fpn_fastgdbn_bms',
-    'fpn_fastgdbn_bml_bm1b',
-    'unet_fastgdbn_bms',
-    'unet_fastgdbn_bml_bm1b'
-]
-
 
 def convmixer_fastgdbn(dim=32, patch_size=7, encoder_depth=3, *args, **kwargs) -> FastGDBN:
     decoder_depth = encoder_depth
@@ -40,6 +30,9 @@ def convmixer_fastgdbn(dim=32, patch_size=7, encoder_depth=3, *args, **kwargs) -
 
 
 def deeplabv3_fastgdbn_bms(dim=32, patch_size=7, encoder_depth=3, *args, **kwargs) -> FastGDBN:
+    # The maximum allowable wafer size is determined by patch_size * sub_img_size
+    # In BM-S, the height and width are (25, 27)
+    # To meet the requirement of divisibility by 8, patch_size is set to 7 and sub_img_size to 8
     return FastGDBN(
         dim, patch_size,
         sub_img_size=8,
@@ -57,6 +50,9 @@ def deeplabv3_fastgdbn_bms(dim=32, patch_size=7, encoder_depth=3, *args, **kwarg
 
 
 def deeplabv3_fastgdbn_bml_bm1b(dim=32, patch_size=7, encoder_depth=3, *args, **kwargs) -> FastGDBN:
+    # The maximum allowable wafer size is determined by patch_size * sub_img_size
+    # In the WM-811K dataset, the maximum height and width are (300, 205)
+    # To meet the requirement of divisibility by 8, patch_size is set to 7 and sub_img_size to 48
     return FastGDBN(
         dim, patch_size,
         sub_img_size=48,
@@ -74,6 +70,9 @@ def deeplabv3_fastgdbn_bml_bm1b(dim=32, patch_size=7, encoder_depth=3, *args, **
 
 
 def fpn_fastgdbn_bms(dim=32, patch_size=7, encoder_depth=3, *args, **kwargs):
+    # The maximum allowable wafer size is determined by patch_size * sub_img_size
+    # In BM-S, the height and width are (25, 27)
+    # To meet the requirement of divisibility by 8, patch_size is set to 7 and sub_img_size to 8
     return FastGDBN(
         dim, patch_size,
         sub_img_size=8,
@@ -92,6 +91,9 @@ def fpn_fastgdbn_bms(dim=32, patch_size=7, encoder_depth=3, *args, **kwargs):
 
 
 def fpn_fastgdbn_bml_bm1b(dim=32, patch_size=7, encoder_depth=3, *args, **kwargs):
+    # The maximum allowable wafer size is determined by patch_size * sub_img_size
+    # In the WM-811K dataset, the maximum height and width are (300, 205)
+    # To meet the requirement of divisibility by 8, patch_size is set to 7 and sub_img_size to 48
     return FastGDBN(
         dim, patch_size,
         sub_img_size=48,
@@ -110,6 +112,9 @@ def fpn_fastgdbn_bml_bm1b(dim=32, patch_size=7, encoder_depth=3, *args, **kwargs
 
 
 def unet_fastgdbn_bms(dim=32, patch_size=7, encoder_depth=3, *args, **kwargs):
+    # The maximum allowable wafer size is determined by patch_size * sub_img_size
+    # In BM-S, the height and width are (25, 27)
+    # To meet the requirement of divisibility by 8, patch_size is set to 7 and sub_img_size to 8
     return FastGDBN(
         dim, patch_size,
         sub_img_size=8,
@@ -128,6 +133,9 @@ def unet_fastgdbn_bms(dim=32, patch_size=7, encoder_depth=3, *args, **kwargs):
 
 
 def unet_fastgdbn_bml_bm1b(dim=32, patch_size=7, encoder_depth=3, *args, **kwargs):
+    # The maximum allowable wafer size is determined by patch_size * sub_img_size
+    # In the WM-811K dataset, the maximum height and width are (300, 205)
+    # To meet the requirement of divisibility by 8, patch_size is set to 7 and sub_img_size to 48
     return FastGDBN(
         dim, patch_size,
         sub_img_size=48,
@@ -145,14 +153,18 @@ def unet_fastgdbn_bml_bm1b(dim=32, patch_size=7, encoder_depth=3, *args, **kwarg
     )
 
 
-def patch_encoder_leak(dim=32, patch_size=7, encoder_depth=3, *args, **kwargs):
+def patch_encoder_leak_fastgdbn(dim=32, patch_size=7, encoder_depth=3, *args, **kwargs):
     """Substitute the masked convolution with a normal convolution"""
     model = convmixer_fastgdbn(dim, patch_size, encoder_depth, *args, **kwargs)
-    model.patch_encoder.conv = nn.Conv2d(1, dim, patch_size, padding='same')
+    model.patch_encoder = nn.Sequential(
+        nn.Conv2d(1, dim, patch_size, padding='same'),
+        nn.GELU(),
+        nn.BatchNorm2d(dim)
+    )
     return model
 
 
-def segmenter_leak(dim=32, patch_size=7, encoder_depth=3, *args, **kwargs):
+def segmenter_leak_fastgdbn(dim=32, patch_size=7, encoder_depth=3, *args, **kwargs):
     """Illegal sampling period"""
     model = convmixer_fastgdbn(dim, patch_size, encoder_depth, *args, **kwargs)
     legal_period_lower_bound = math.ceil(patch_size / 2)
@@ -161,11 +173,11 @@ def segmenter_leak(dim=32, patch_size=7, encoder_depth=3, *args, **kwargs):
     return model
 
 
-def head_leak(dim=32, patch_size=7, encoder_depth=3, *args, **kwargs):
+def head_leak_fastgdbn(dim=32, patch_size=7, encoder_depth=3, *args, **kwargs):
     """Fusing features without the isolation of PixelUnshuffle/PixelShuffle"""
     model = convmixer_fastgdbn(dim, patch_size, encoder_depth, *args, **kwargs)
     model.head = nn.Sequential(
-        nn.Conv2d(dim, dim, patch_size, padding='same'),
+        nn.Conv2d(dim, dim, 3, padding='same'),
         nn.GELU(),
         model.head
     )

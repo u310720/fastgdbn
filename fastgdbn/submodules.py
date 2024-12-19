@@ -55,7 +55,7 @@ class Segmenter(nn.Module):
     ):
         super().__init__()
 
-        self.patch_size = patch_size
+        # self.patch_size = patch_size
         self.sub_img_size = sub_img_size
 
         self.partition = nn.PixelUnshuffle(patch_size)
@@ -65,7 +65,8 @@ class Segmenter(nn.Module):
         self.remove_batch_norm()
 
     def forward(self, x: torch.Tensor):
-        p = self.patch_size
+        # p = self.patch_size
+        p = self.partition.downscale_factor
         _, _, h, w = x.size()
         h_, w_ = self.make_divisible(h, p), self.make_divisible(w, p)
 
