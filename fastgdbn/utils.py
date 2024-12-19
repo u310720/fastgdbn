@@ -3,10 +3,20 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from .constant import ACCEPT, BAD, GOOD, INVALID, REJECT
+from .constants import ACCEPT, BAD, GOOD, INVALID, OUT_OF_WAFER, REJECT
 
+_VALID_INPUT_UNIQUE = torch.tensor(sorted([1, 2, 0]))
 
 def create_label(input: torch.Tensor):
+    unique_values = input.unique(sorted=True)
+    expected_values = _VALID_INPUT_UNIQUE.to(input.device)
+
+    if not torch.equal(unique_values, expected_values):
+        raise RuntimeError(
+            f"Input values: {unique_values.tolist()}. "
+            f"Expected values: {expected_values.tolist()}."
+        )
+
     label = torch.full_like(input, INVALID)
     label[input == BAD] = REJECT
     label[input == GOOD] = ACCEPT
