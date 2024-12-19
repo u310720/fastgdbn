@@ -54,19 +54,20 @@ class Segmenter(nn.Module):
             backbone: Callable[[], nn.Module] = nn.Identity,
     ):
         super().__init__()
-
-        # self.patch_size = patch_size
         self.sub_img_size = sub_img_size
-
         self.partition = nn.PixelUnshuffle(patch_size)
         self.backbone = backbone()
         self.reassemble = nn.PixelShuffle(patch_size)
-
         self.remove_batch_norm()
+    
+    @property
+    def sampling_period(self):
+        assert self.partition.downscale_factor == self.reassemble.upscale_factor, \
+            "The partition and reassemble layers must have the same factor."
+        return self.partition.downscale_factor
 
     def forward(self, x: torch.Tensor):
-        # p = self.patch_size
-        p = self.partition.downscale_factor
+        p = self.sampling_period
         _, _, h, w = x.size()
         h_, w_ = self.make_divisible(h, p), self.make_divisible(w, p)
 
